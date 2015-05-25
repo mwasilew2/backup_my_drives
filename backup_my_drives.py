@@ -45,19 +45,6 @@ CHANGE_LOG = """
 
 """
 
-# TO DO:
-# - "change log" argument that shows history of changes
-# - "verbose" argument that would print to logs, but also to the screen
-# - "quiet" argument that would not require confirmations, would not print any text to screen
-# - create a github project for this script
-# - instead of having notes here, keep them on the github page
-# - rename directory containing this script
-# - total time elapsed from start of the script till the end
-# - read more about cli tools, e.g. write usage part as in man
-# - destination -> not fixed, but where the script is 
-
-
-# the correct way of storing version: http://stackoverflow.com/questions/15405636/pythons-argparse-to-show-programs-version-with-prog-and-version-string-formatt
 VERSION = """
 2.2
 """
