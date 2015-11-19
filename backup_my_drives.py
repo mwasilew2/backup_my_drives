@@ -43,10 +43,16 @@ CHANGE_LOG = """
 - change log
 - name was changed from backup_script_for_my_drives_(version).py to backup_my_drives.py
 
+2.3
+===
+- print smartctl errors
+- save to log file the list of all dirs selected
+- save to log file exact rsync commands used
+
 """
 
 VERSION = """
-2.2
+2.3
 """
 
 
@@ -168,6 +174,12 @@ class BackupFunctions(object): #pylint: disable=R0903
 
         else:
             print START_MSG
+
+
+            for confirmed_entry in self.list_to_run:
+                os.system("echo '" + confirmed_entry + "' >> " + self.log_location_name)
+
+
             for confirmed_entry in self.list_to_run:
                 try:
 
@@ -179,6 +191,8 @@ class BackupFunctions(object): #pylint: disable=R0903
                     self.source + confirmed_entry + ' ' + \
                     self.destination + confirmed_entry + \
                     ' >> ' + self.log_location + self.log_file_name + ' 2>&1'
+
+                    os.system("echo '" + command + "' >> " + self.log_location_name)
 
                     result = os.system(command)
                     if result != 0:
