@@ -119,6 +119,14 @@ class BackupFunctions(object): #pylint: disable=R0903
 
         self.list_to_run = []
 
+        # check the drive
+        drive = '/dev/sdb'
+        os.system('clear')
+        os.system("smartctl " + drive + " -l error")
+        os.system("'RED='\\033[0;31m';NC='\\033[0m';IFS=$'\\n';for i in `smartctl " + drive + " -A | grep \"0x00\"`; do NR=$(echo $i | awk '{print $1}'); VAL=$(echo $i | awk '{print $10}'); THR=$(echo $i | awk '{print $6}'); if [ \"$VAL\" -gt \"$THR\" ];then if [ \"$NR\" == 5 ] || [ \"$NR\" == 187 ] || [ \"$NR\" == 188 ] || [ \"$NR\" == 196 ] || [ \"$NR\" == 197 ] || [ \"$NR\" == 198 ]; then echo -en \"${RED}\";echo $i; echo -en \"${NC}\"; else echo $i; fi; fi ; done'")
+
+
+
         # make sure that user knows how this coppying works
         os.system('clear')
         if confirm(WARNING_MSG):
