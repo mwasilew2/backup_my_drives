@@ -144,7 +144,7 @@ class BackupFunctions(object): #pylint: disable=R0903
                 # if raw_value bigger than threshold
                 if columns[5] < columns[9]:
                     # print in red important metrics
-                    if columns[1] in important_metrics:
+                    if columns[0] in important_metrics:
                         print '\033[1;31m' + line + '\033[1;m'
                     else:
                         print line
