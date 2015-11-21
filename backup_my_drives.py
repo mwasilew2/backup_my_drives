@@ -10,6 +10,9 @@ import sys
 from datetime import datetime
 import argparse
 
+# subprocess is supposed to replace some of the above
+import subprocess
+
 
 WARNING_MSG = """
 Be extremely careful! If destination contains more data than source it
@@ -126,11 +129,35 @@ class BackupFunctions(object): #pylint: disable=R0903
         self.list_to_run = []
 
         # check the drive
-        drive = '/dev/sdb'
         os.system('clear')
-        os.system("smartctl " + drive + " -l error")
-        os.system("'RED='\\033[0;31m';NC='\\033[0m';IFS=$'\\n';for i in `smartctl " + drive + " -A | grep \"0x00\"`; do NR=$(echo $i | awk '{print $1}'); VAL=$(echo $i | awk '{print $10}'); THR=$(echo $i | awk '{print $6}'); if [ \"$VAL\" -gt \"$THR\" ];then if [ \"$NR\" == 5 ] || [ \"$NR\" == 187 ] || [ \"$NR\" == 188 ] || [ \"$NR\" == 196 ] || [ \"$NR\" == 197 ] || [ \"$NR\" == 198 ]; then echo -en \"${RED}\";echo $i; echo -en \"${NC}\"; else echo $i; fi; fi ; done'")
+        drive = raw_input('Which drive to check for smartcl?: ')
+        os.system('echo "Checking drive ' + drive + ' for smartctl..."')
+        os.system("smartctl " + drive + " -d sat -l error")
+        metrics = subprocess.check_output("smartctl " + drive + " -d sat -A | grep \"0x00\"", shell=True)
+        # RED='\033[0;31m';NC='\033[0m';IFS=$'\n';for i in `smartctl /dev/sdb -d sat -A | grep "0x00"`; do NR=$(echo $i | awk '{print $1}'); VAL=$(echo $i | awk '{print $10}'); THR=$(echo $i | awk '{print $6}'); if [ "$VAL" -gt "$THR" ];then if [ "$NR" == 5 ] || [ "$NR" == 187 ] || [ "$NR" == 188 ] || [ "$NR" == 196 ] || [ "$NR" == 197 ] || [ "$NR" == 198 ]; then echo -en "${RED}";echo $i; echo -en "${NC}"; else echo $i; fi; fi ; done
+        important_metrics = ['5', '187', '188', '196', '197', '198']
 
+        for line in metrics.split('\n'):
+            # if the line contains metric value
+            if "0x00" in line:
+                columns = line.split()
+                # if raw_value bigger than threshold
+                if columns[5] < columns[9]:
+                    # print in red important metrics
+                    if columns[1] in important_metrics:
+                        print '\033[1;31m' + line + '\033[1;m'
+                    else:
+                        print line
+
+
+        # cli_command = "RED=\'\\033[0;31m';NC='\\033[0m';IFS=$'\\n';for i in " + metrics + "; do NR=\$(echo \$i | awk '{print \$1}'); VAL=\$(echo \$i | awk '{print \$10}'); THR=\$(echo \$i | awk '{print \$6}'); if [ \"\VAL\" -gt \"\$THR\" ];then if [ \"\$NR\" == 5 ] || [ \"\$NR\" == 187 ] || [ \"\$NR\" == 188 ] || [ \"\$NR\" == 196 ] || [ \"\$NR\" == 197 ] || [ \"\$NR\" == 198 ]; then echo -en \"\${RED}\";echo \$i; echo -en \"\${NC}\"; else echo \$i; fi; fi ; done'"
+        
+        # os.system(cli_command)
+        if confirm('Do you want to continue?') == 'go':
+            pass
+        else:
+            print '\n\n  Bye.\n'
+            sys.exit(0)
 
 
         # make sure that user knows how this coppying works
