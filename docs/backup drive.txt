@@ -1,1 +1,1 @@
-why ntfs not ext3 - cause windows is having difficulties mounting ext 3 drives, preferences: iocharset=utf8
+why ntfs not ext3 - cause windows is having difficulties mounting ext 3 drives
