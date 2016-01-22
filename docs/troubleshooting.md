@@ -8,3 +8,10 @@ Run TrueCrypt from the drive where OS runs. If you store your container on a USB
 preferences: iocharset=utf8
 
 why ntfs not ext3 - cause windows is having difficulties mounting ext 3 drives
+
+to allow non root mount of truecrypt containers:
+- create a group truecrypt
+- add your user to this group
+- add to sudoers with visudo:
+# Users in the truecrypt group are allowed to run TrueCrypt as root.
+%truecrypt ALL=(root) NOPASSWD:/usr/bin/truecrypt
