@@ -9,6 +9,14 @@ preferences: iocharset=utf8
 
 why ntfs not ext3 - cause windows is having difficulties mounting ext 3 drives
 
+
+
+If you're mounting a container on a USB drive, you need to mount the usb drive as yourself, i.e. you might also need to add yourself to the vboxsf user group: `usermod -a -G vboxsf your_username` and mount the folder as yourself, i.e. `sudo mount -t vboxsf -o uid=xxxxx,gid=xxxxx mount_name_here /path/to/mount/folder`. At the moment of writing vboxsf mount options do not include SELinux settings, so you cannot change the file context for the mount.
+
+Then mount the truecrypt volume with the right SELinux options:
+
+truecrypt --mount container --fs-options='iocharset=utf8,context=system_u:object_r:user_home_t:s0' mountpoint
+
 to allow non root mount of truecrypt containers:
 - create a group truecrypt
 - add your user to this group
