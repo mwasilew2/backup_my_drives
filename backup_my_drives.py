@@ -19,6 +19,7 @@ CHANGE_LOG = """
 ===
 - parsing cli parameters
 - using objects
+- separation of environments to conf files
 3.0
 ===
 - moved to python 3
@@ -141,9 +142,11 @@ def check_if_bin_installed(command):
     else:
         pass
 
+# ==========================================================================
+#                   OBJECT
+# ==========================================================================
 
 class BackupObject(object):
-
 
     def __init__(self, path):
         self.SMARTCTL_METRICS = ['5', '187', '188', '196', '197', '198']
@@ -232,11 +235,26 @@ class BackupObject(object):
                     print(line)
 
 
+    def create_directories(self):
+        log_dir_parent = os.path.dirname(self.LOG_DIR)
+        snapshot_dir_parent = self.LOG_DIR 
+        if self.SCRIPT_PARENT_DIR != log_dir_parent or self.SCRIPT_PARENT_DIR != self.SNAPSHOTS_DIR:
+            print('TODO!location of this script is different than configured in the conf file')
+            print(self.LOG_DIR)
+            print(self.SNAPSHOTS_DIR)
+            sys.exit(0)
+        else:
+            mkdir(self.LOG_DIR)
+            mkdir(self.SNAPSHOTS_DIR)
+
+
     def prepare_and_initiate(self):
         check_if_bin_installed('rsnapshot')
+        clr_scr()
 
         # print source and destination, prepare dirs
-        clr_scr()
+        self.create_directories()
+
         print('\033[0;36mSources :\033[1;m')
         for source in self.SOURCE_LINES:
             print(source.rstrip())
@@ -246,8 +264,6 @@ class BackupObject(object):
         print(self.DESTINATION_LINE.rstrip())
         print('')
 
-        mkdir(self.LOG_DIR)
-        mkdir(self.SNAPSHOTS_DIR)
 
         confirm_continue()
 
