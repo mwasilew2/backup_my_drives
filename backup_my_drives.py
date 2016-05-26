@@ -67,13 +67,13 @@ def get_input(msg):
     return user_input
 
 
-def get_rsnap_level_info(level):
+def get_rsnap_level_info(level, levels_config, snapshots_dir):
     # value in config file
-    level_info = level + '\tconfig: ' + LEVELS_CONFIG[level]
+    level_info = level + '\tconfig: ' + levels_config[level]
 
     # count existing snapshots
     existing_snapshots = 0
-    list_of_snapshots = os.listdir(SNAPSHOTS_DIR)
+    list_of_snapshots = os.listdir(snapshots_dir)
     for snap in list_of_snapshots:
         if level in snap:
             existing_snapshots += 1
@@ -81,7 +81,7 @@ def get_rsnap_level_info(level):
     level_info = level_info + '\texisting: ' + str(existing_snapshots)
 
     # get last mod date
-    all_snaps = [SNAPSHOTS_DIR + s for s in os.listdir(SNAPSHOTS_DIR)]
+    all_snaps = [snapshots_dir + s for s in os.listdir(snapshots_dir)]
     all_level_snaps = [snap for snap in all_snaps if (os.path.isdir(snap) and level in snap)]
     if all_level_snaps:
         latest_subdir = max(all_level_snaps, key=os.path.getmtime)
@@ -237,8 +237,8 @@ class BackupObject(object):
 
     def create_directories(self):
         log_dir_parent = os.path.dirname(self.LOG_DIR)
-        snapshot_dir_parent = self.LOG_DIR 
-        if self.SCRIPT_PARENT_DIR != log_dir_parent or self.SCRIPT_PARENT_DIR != self.SNAPSHOTS_DIR:
+        snapshot_dir_parent = os.path.dirname(self.SNAPSHOTS_DIR)
+        if self.SCRIPT_PARENT_DIR != log_dir_parent or self.SCRIPT_PARENT_DIR != snapshot_dir_parent:
             print('TODO!location of this script is different than configured in the conf file')
             print(self.LOG_DIR)
             print(self.SNAPSHOTS_DIR)
@@ -264,7 +264,6 @@ class BackupObject(object):
         print(self.DESTINATION_LINE.rstrip())
         print('')
 
-
         confirm_continue()
 
         # everything is ready at this point, we need to get levels from user
@@ -283,7 +282,7 @@ class BackupObject(object):
         print(info)
 
         for level in self.LEVELS:
-            print(get_rsnap_level_info(level))
+            print(get_rsnap_level_info(level, self.LEVELS_CONFIG, self.SNAPSHOTS_DIR))
         print('')
 
         # now that the user has been informed, ask for backup level
