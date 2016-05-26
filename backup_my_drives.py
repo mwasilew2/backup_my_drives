@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 
+import argparse
 import os
 import shutil
 import subprocess
@@ -9,11 +10,15 @@ import time
 """
 TODO
 - smartctl resutls saved to file in log/
-- cli argument parsing
 - save logs not only on the destination, but on the source as well
+- edit rsnapshot.conf from this script for log & snaphots dirs (ask if it's different than current)
 """
 
 CHANGE_LOG = """
+3.1
+===
+- parsing cli parameters
+- using objects
 3.0
 ===
 - moved to python 3
@@ -43,45 +48,8 @@ backup_my_drives.py
 """
 
 VERSION = """
-3.0
+3.1
 """
-
-# ==========================================================================
-#                   STATIC & FILE PARSING
-# ==========================================================================
-
-SMARTCTL_METRICS = ['5', '187', '188', '196', '197', '198']
-SCRIPT_PARENT_DIR = os.path.dirname(os.path.abspath(__file__))
-CONFIG_FILE = SCRIPT_PARENT_DIR + '/rsnapshot.conf'
-
-
-SOURCE_LINES = []
-DESTINATION_LINE = ''
-SNAPSHOTS_DIR = ''
-LOG_FILE = ''
-LOG_DIR = ''
-LEVELS = []
-LEVELS_CONFIG = {}
-
-with open(CONFIG_FILE) as f:
-    for line in f:
-        if line.startswith('backup'):
-            SOURCE_LINES.append(line)
-
-        if line.startswith('snapshot_root'):
-            DESTINATION_LINE = line
-            columns = line.split()
-            SNAPSHOTS_DIR = columns[1]
-
-        if line.startswith('logfile'):
-            columns = line.split()
-            LOG_FILE = columns[1]
-            LOG_DIR = os.path.dirname(os.path.abspath(LOG_FILE))
-
-        if line.startswith('retain'):
-            columns = line.split()
-            LEVELS.append(columns[1])
-            LEVELS_CONFIG[columns[1]] = columns[2]
 
 
 # ==========================================================================
@@ -173,151 +141,218 @@ def check_if_bin_installed(command):
     else:
         pass
 
-# ==========================================================================
-#                   SCRIPT
-# ==========================================================================
+
+class BackupObject(object):
 
 
-def check_drive():
+    def __init__(self, path):
+        self.SMARTCTL_METRICS = ['5', '187', '188', '196', '197', '198']
+        self.SCRIPT_PARENT_DIR = os.path.dirname(os.path.abspath(__file__))
+        self.CONFIG_FILE = path
 
-    check_if_bin_installed('smartctl')
-    clr_scr()
+        self.SOURCE_LINES = []
+        self.DESTINATION_LINE = ''
+        self.SNAPSHOTS_DIR = ''
+        self.LOG_FILE = ''
+        self.LOG_DIR = ''
+        self.LEVELS = []
+        self.LEVELS_CONFIG = {}
 
-    # print disk info to help user
-    subprocess.check_call(
-        'lsblk',
-        shell=True
-    )
+        with open(self.CONFIG_FILE) as f:
+            for line in f:
+                if line.startswith('backup'):
+                    self.SOURCE_LINES.append(line)
 
-    # user input - select drive
-    print('')
-    drive = get_input('Which drive to check for SMART metrics? (/dev/sdx) : ')
+                if line.startswith('snapshot_root'):
+                    self.DESTINATION_LINE = line
+                    columns = line.split()
+                    self.SNAPSHOTS_DIR = columns[1]
 
-    # get metrics from cli
-    try:
-        lines_w_metrics = subprocess.check_output(
-            'smartctl ' + drive + ' -d sat -A | grep "0x00"',
-            shell=True
-        )
-    except subprocess.CalledProcessError as e:
-        print(e)
-        return
+                if line.startswith('logfile'):
+                    columns = line.split()
+                    self.LOG_FILE = columns[1]
+                    self.LOG_DIR = os.path.dirname(os.path.abspath(self.LOG_FILE))
 
-    # print SMART metrics
-    for line in lines_w_metrics.decode('utf-8').split('\n'):
-        # double check if line contains a metric
-        if '0x00' in line:
-            columns = line.split()
-            # print only if raw_value bigger than threshold
-            if columns[5] < columns[9]:
-                if columns[0] in SMARTCTL_METRICS:
-                    # print in red important metrics
-                    print('\033[1;31m' + line + '\033[1;m')
-                else:
-                    # print any other metrics
-                    print(line)
-            else:
-                print(line)
+                if line.startswith('retain'):
+                    columns = line.split()
+                    self.LEVELS.append(columns[1])
+                    self.LEVELS_CONFIG[columns[1]] = columns[2]
 
+        # run functions
 
-def prepare_and_initiate():
-    check_if_bin_installed('rsnapshot')
+        clr_scr()
+        choice = get_input('check drives? (y/n) ')
+        while choice == 'y':
+            self.check_drive()
+            choice = get_input('check another drive? (y/n) ')
+        confirm_continue()
 
-    # print source and destination, prepare dirs
-    clr_scr()
-    print('\033[0;36mSources :\033[1;m')
-    for source in SOURCE_LINES:
-        print(source.rstrip())
-    print('')
-
-    print('\033[0;36mDestination :\033[1;m')
-    print(DESTINATION_LINE.rstrip())
-    print('')
-
-    mkdir(LOG_DIR)
-    mkdir(SNAPSHOTS_DIR)
-
-    confirm_continue()
-
-    # everything is ready at this point, we need to get levels from user
-    # inform how levels work in rsnapshot
-    clr_scr()
-    info = 'Rotation on every level happens regardless if highest snapshot ' +\
-        'from previous level is available. ' +\
-        'New snapshot on every level is created only if highest snapshot ' +\
-        'from previous level is available. ' +\
-        'Only first level actually backs up any files from the file system,' +\
-        'other only rotate. ' +\
-        'This means that if you run 2nd and not all 1st are available, ' +\
-        'you will permanently remove highest 2nd snapshot, ' +\
-        'but not create any new 2nd snapshots.\n'
-
-    print(info)
-
-    for level in LEVELS:
-        print(get_rsnap_level_info(level))
-    print('')
-
-    # now that the user has been informed, ask for backup level
-    levels_to_run = []
-    for level in LEVELS:
-        if get_input('run \033[0;32m' + level + '\033[1;m backup? (y/n) ') == 'y':
-            levels_to_run.append(level)
-
-    if not levels_to_run:
-        print('Bye.')
-        sys.exit(0)
-
-    # print final confirmation
-    print('')
-    msg = 'THIS IS FINAL CONFIRMATION. THE FOLLOWIGN BACKUPS WILL RUN:\n'
-
-    for level in levels_to_run:
-        msg = msg + '\033[1;31m' + level.upper() + '\033[1;m\n'
-
-    print(msg)
-
-    confirm_continue()
-
-    # start backup process
-    run_rsnapshot(levels_to_run)
+        self.prepare_and_initiate()
 
 
-def run_rsnapshot(levels_to_run):
+    def check_drive(self):
 
-    # check config file
-    try:
+        check_if_bin_installed('smartctl')
+        clr_scr()
+
+        # print disk info to help user
         subprocess.check_call(
-            'rsnapshot -c ' + CONFIG_FILE + ' configtest',
+            'lsblk',
             shell=True
         )
-    except subprocess.CalledProcessError as e:
-        print(e)
-        return
 
-    # run backups
-    for level in levels_to_run:
-        print('Starting ' + level + ' backup...')
+        # user input - select drive
+        print('')
+        drive = get_input('Which drive to check for SMART metrics? (/dev/sdx) : ')
+
+        # get metrics from cli
         try:
-            subprocess.check_call(
-                'rsnapshot -q -c ' + CONFIG_FILE + ' ' + level,
+            lines_w_metrics = subprocess.check_output(
+                'smartctl ' + drive + ' -d sat -A | grep "0x00"',
                 shell=True
             )
         except subprocess.CalledProcessError as e:
             print(e)
             return
 
+        # print SMART metrics
+        for line in lines_w_metrics.decode('utf-8').split('\n'):
+            # double check if line contains a metric
+            if '0x00' in line:
+                columns = line.split()
+                # print only if raw_value bigger than threshold
+                if columns[5] < columns[9]:
+                    if columns[0] in self.SMARTCTL_METRICS:
+                        # print in red important metrics
+                        print('\033[1;31m' + line + '\033[1;m')
+                    else:
+                        # print any other metrics
+                        print(line)
+                else:
+                    print(line)
+
+
+    def prepare_and_initiate(self):
+        check_if_bin_installed('rsnapshot')
+
+        # print source and destination, prepare dirs
+        clr_scr()
+        print('\033[0;36mSources :\033[1;m')
+        for source in self.SOURCE_LINES:
+            print(source.rstrip())
+        print('')
+
+        print('\033[0;36mDestination :\033[1;m')
+        print(self.DESTINATION_LINE.rstrip())
+        print('')
+
+        mkdir(self.LOG_DIR)
+        mkdir(self.SNAPSHOTS_DIR)
+
+        confirm_continue()
+
+        # everything is ready at this point, we need to get levels from user
+        # inform how levels work in rsnapshot
+        clr_scr()
+        info = 'Rotation on every level happens regardless if highest snapshot ' +\
+            'from previous level is available. ' +\
+            'New snapshot on every level is created only if highest snapshot ' +\
+            'from previous level is available. ' +\
+            'Only first level actually backs up any files from the file system,' +\
+            'other only rotate. ' +\
+            'This means that if you run 2nd and not all 1st are available, ' +\
+            'you will permanently remove highest 2nd snapshot, ' +\
+            'but not create any new 2nd snapshots.\n'
+
+        print(info)
+
+        for level in self.LEVELS:
+            print(get_rsnap_level_info(level))
+        print('')
+
+        # now that the user has been informed, ask for backup level
+        levels_to_run = []
+        for level in self.LEVELS:
+            if get_input('run \033[0;32m' + level + '\033[1;m backup? (y/n) ') == 'y':
+                levels_to_run.append(level)
+
+        if not levels_to_run:
+            print('Bye.')
+            sys.exit(0)
+
+        # print final confirmation
+        print('')
+        msg = 'THIS IS FINAL CONFIRMATION. THE FOLLOWIGN BACKUPS WILL RUN:\n'
+
+        for level in levels_to_run:
+            msg = msg + '\033[1;31m' + level.upper() + '\033[1;m\n'
+
+        print(msg)
+
+        confirm_continue()
+
+        # start backup process
+        self.run_rsnapshot(levels_to_run)
+
+
+    def run_rsnapshot(self,levels_to_run):
+
+        # check config file
+        try:
+            subprocess.check_call(
+                'rsnapshot -c ' + self.CONFIG_FILE + ' configtest',
+                shell=True
+            )
+        except subprocess.CalledProcessError as e:
+            print(e)
+            return
+
+        # run backups
+        for level in levels_to_run:
+            print('Starting ' + level + ' backup...')
+            try:
+                subprocess.check_call(
+                    'rsnapshot -q -c ' + self.CONFIG_FILE + ' ' + level,
+                    shell=True
+                )
+            except subprocess.CalledProcessError as e:
+                print(e)
+                return
+
 
 def main():
+    parser = argparse.ArgumentParser(
+        description='Script used for creating snapshots of filesystem',
+        epilog='Example of use:\n '
+        'backup_my_drives.py -c config_file.conf'
+    )
 
-    clr_scr()
-    choice = get_input('check drives? (y/n) ')
-    while choice == 'y':
-        check_drive()
-        choice = get_input('check another drive? (y/n) ')
-    confirm_continue()
+    group = parser.add_mutually_exclusive_group()
 
-    prepare_and_initiate()
+    group.add_argument(
+        '-c',
+        '--config_file',
+        help='provide path to the config file'
+    )
+
+    parser.add_argument(
+        '-V',
+        '--version',
+        action='version',
+        version=VERSION,
+        help='print version of the script'
+    )
+
+    args = parser.parse_args()
+
+    if len(sys.argv) == 1:
+        parser.print_help()
+        sys.exit(1)
+    else:
+        if args.config_file:
+            BackupObject(args.config_file)
+        else:
+            print('please provide path to config file')
 
 if __name__ == '__main__':
     main()
