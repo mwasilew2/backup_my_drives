@@ -81,7 +81,7 @@ def get_rsnap_level_info(level, levels_config, snapshots_dir):
     level_info = level_info + '\texisting: ' + str(existing_snapshots)
 
     # get last mod date
-    all_snaps = [snapshots_dir + s for s in os.listdir(snapshots_dir)]
+    all_snaps = [snapshots_dir + '/' + s for s in os.listdir(snapshots_dir)]
     all_level_snaps = [snap for snap in all_snaps if (os.path.isdir(snap) and level in snap)]
     if all_level_snaps:
         latest_subdir = max(all_level_snaps, key=os.path.getmtime)
@@ -297,7 +297,7 @@ class BackupObject(object):
 
         # print final confirmation
         print('')
-        msg = 'THIS IS FINAL CONFIRMATION. THE FOLLOWIGN BACKUPS WILL RUN:\n'
+        msg = 'THIS IS FINAL CONFIRMATION. THE FOLLOWING BACKUPS WILL RUN:\n'
 
         for level in levels_to_run:
             msg = msg + '\033[1;31m' + level.upper() + '\033[1;m\n'
@@ -327,7 +327,7 @@ class BackupObject(object):
             print('Starting ' + level + ' backup...')
             try:
                 subprocess.check_call(
-                    'rsnapshot -q -c ' + self.CONFIG_FILE + ' ' + level,
+                    'rsnapshot -c ' + self.CONFIG_FILE + ' ' + level,
                     shell=True
                 )
             except subprocess.CalledProcessError as e:
