@@ -235,11 +235,27 @@ class BackupObject(object):
                     print(line)
 
 
+    def check_perl_mod_installed(self, module_name):
+
+        try:
+            output = subprocess.check_output(
+                'perldoc -l ' + module_name,
+                shell=True
+            ).decode('utf-8')
+        except:
+            print('Did not find perl module ' + module_name)
+            print('yum install perl-CPAN')
+            print('cpan Module::Build')
+            print('cpan Lchown')
+            sys.exit(1)
+
+
     def check_sources(self):
         exit = False
         for source in self.SOURCE_LINES:
-            if not os.path.isdir(source):
-                print('Following source directory does not exist: ' + source)
+            path = source.split()[1]
+            if not os.path.isdir(path):
+                print('Following source directory does not exist: ' + path)
                 exit = True
         
         if exit:
@@ -260,9 +276,9 @@ class BackupObject(object):
 
 
     def prepare_and_initiate(self):
-        check_if_bin_installed('rsnapshot')
         clr_scr()
-
+        check_if_bin_installed('rsnapshot')
+        self.check_perl_mod_installed('Lchown')
         self.check_sources()
 
         # print source and destination, prepare dirs
