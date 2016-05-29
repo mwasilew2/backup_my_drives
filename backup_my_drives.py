@@ -367,6 +367,13 @@ class BackupObject(object):
                 print(e)
                 return
 
+        # check logs for errors
+        subprocess.check_call(
+            'tail -n 20 ./log/rsnapshot',
+            shell=True
+        )
+
+
 
 def main():
     parser = argparse.ArgumentParser(
