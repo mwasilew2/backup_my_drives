@@ -235,6 +235,17 @@ class BackupObject(object):
                     print(line)
 
 
+    def check_sources(self):
+        exit = False
+        for source in self.SOURCE_LINES:
+            if not os.path.isdir(source):
+                print('Following source directory does not exist: ' + source)
+                exit = True
+        
+        if exit:
+            sys.exit(0)
+
+
     def create_directories(self):
         log_dir_parent = os.path.dirname(self.LOG_DIR)
         snapshot_dir_parent = os.path.dirname(self.SNAPSHOTS_DIR)
@@ -252,6 +263,8 @@ class BackupObject(object):
         check_if_bin_installed('rsnapshot')
         clr_scr()
 
+        self.check_sources()
+
         # print source and destination, prepare dirs
         self.create_directories()
 
@@ -262,6 +275,10 @@ class BackupObject(object):
 
         print('\033[0;36mDestination :\033[1;m')
         print(self.DESTINATION_LINE.rstrip())
+        print('')
+
+        print('\033[0;36mScript path :\033[1;m')
+        print(self.SCRIPT_PARENT_DIR.rstrip())
         print('')
 
         confirm_continue()
