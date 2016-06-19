@@ -146,6 +146,9 @@ def check_if_bin_installed(command):
 #                   OBJECT
 # ==========================================================================
 
+def print_modified():
+    print("to do")
+
 class BackupObject(object):
 
     def __init__(self, path):
@@ -390,6 +393,12 @@ def main():
         help='provide path to the config file'
     )
 
+    group.add_argument(
+        '-m',
+        '--modified',
+        help='files modified in the last backup'
+    )
+
     parser.add_argument(
         '-V',
         '--version',
@@ -406,8 +415,10 @@ def main():
     else:
         if args.config_file:
             BackupObject(args.config_file)
-        else:
-            print('please provide path to config file')
+        if args.modified:
+            print_modified()
+
+
 
 if __name__ == '__main__':
     main()
