@@ -9,9 +9,22 @@ import time
 
 """
 TODO
-- smartctl resutls saved to file in log/
-- save logs not only on the destination, but on the source as well
-- edit rsnapshot.conf from this script for log & snaphots dirs (ask if it's different than current)
+- edit rsnapshot.conf from this script for log & snaphots dirs (ask if it's different than current)?
+- user flow (use python library for tui or use the developed one):
+    - start script with config file passed as argument
+    - first thing the script does is it checks for all packages, bins
+    - first page prints all info (status of all backups, date etc, paths from config files)
+    - at the bottom there is a selectable menu (tui):
+        - check drive for smartctl
+			- smartctl resutls saved to file in log/
+			- save logs not only on the destination, but on the source as well
+            - print lsblk
+            - ask for drive (selectable?)
+            - ask: test another drive (y/n) ?
+        - start backup
+            - inform user about how rsnapshot works, get confirmation, start backup, print results
+        - print files modified in the last backup (print the actuall command that is used)
+        - quit
 """
 
 CHANGE_LOG = """
@@ -147,8 +160,6 @@ def check_if_bin_installed(command):
 #                   OBJECT
 # ==========================================================================
 
-def print_modified():
-    print("to do")
 
 class BackupObject(object):
 
@@ -389,12 +400,6 @@ def main():
         help='provide path to the config file'
     )
 
-    group.add_argument(
-        '-m',
-        '--modified',
-        help='files modified in the last backup'
-    )
-
     parser.add_argument(
         '-V',
         '--version',
@@ -411,8 +416,6 @@ def main():
     else:
         if args.config_file:
             BackupObject(args.config_file)
-        if args.modified:
-            print_modified()
 
 
 if __name__ == '__main__':
