@@ -20,6 +20,7 @@ CHANGE_LOG = """
 - parsing cli parameters
 - using objects
 - separation of environments to conf files
+- check for presence of perl modules
 3.0
 ===
 - moved to python 3
@@ -195,7 +196,6 @@ class BackupObject(object):
 
         self.prepare_and_initiate()
 
-
     def check_drive(self):
 
         check_if_bin_installed('smartctl')
@@ -237,7 +237,6 @@ class BackupObject(object):
                 else:
                     print(line)
 
-
     def check_perl_mod_installed(self, module_name):
 
         try:
@@ -250,8 +249,8 @@ class BackupObject(object):
             print('yum install perl-CPAN')
             print('cpan Module::Build')
             print('cpan Lchown')
+            print('cpan YAML')
             sys.exit(1)
-
 
     def check_sources(self):
         exit = False
@@ -260,10 +259,9 @@ class BackupObject(object):
             if not os.path.isdir(path):
                 print('Following source directory does not exist: ' + path)
                 exit = True
-        
+
         if exit:
             sys.exit(0)
-
 
     def create_directories(self):
         log_dir_parent = os.path.dirname(self.LOG_DIR)
@@ -277,11 +275,11 @@ class BackupObject(object):
             mkdir(self.LOG_DIR)
             mkdir(self.SNAPSHOTS_DIR)
 
-
     def prepare_and_initiate(self):
         clr_scr()
         check_if_bin_installed('rsnapshot')
         self.check_perl_mod_installed('Lchown')
+        self.check_perl_mod_installed('YAML')
         self.check_sources()
 
         # print source and destination, prepare dirs
@@ -345,8 +343,7 @@ class BackupObject(object):
         # start backup process
         self.run_rsnapshot(levels_to_run)
 
-
-    def run_rsnapshot(self,levels_to_run):
+    def run_rsnapshot(self, levels_to_run):
 
         # check config file
         try:
@@ -375,7 +372,6 @@ class BackupObject(object):
             'tail -n 20 ./log/rsnapshot',
             shell=True
         )
-
 
 
 def main():
@@ -417,7 +413,6 @@ def main():
             BackupObject(args.config_file)
         if args.modified:
             print_modified()
-
 
 
 if __name__ == '__main__':
