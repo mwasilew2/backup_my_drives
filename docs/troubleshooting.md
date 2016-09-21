@@ -7,7 +7,9 @@
 
 - preferences: iocharset=utf8
 
-- why ntfs not ext3 - cause windows is having difficulties mounting ext 3 drives
+- file system:
+	- depends where the drive will be used, e.g. if you know it will be only used on a linux machine you can use ext4
+	- for windows ntfs (fat32 does not support links, Windows cannot moutn anything else)
 
 - truecrypt requires a kernel module called loop
     - rhel 7.2, /etc/sysconfig/modules/loop.modules:
