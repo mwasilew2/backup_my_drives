@@ -1,247 +1,422 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 
-"""The purpose of this script is to simplify backup tasks. Linux command
-rsync is used to ensure that an exact copy is created (e.g. attributes
-mirrored, files deleted).
-"""
-
-import os
-import sys
-from datetime import datetime
 import argparse
-
-# subprocess is supposed to replace some of the above
+import os
+import shutil
 import subprocess
+import sys
+import time
 
-
-WARNING_MSG = """
-Be extremely careful! If destination contains more data than source it
-will be deleted permanently from your back up (it will be mirrored)!!!!!
-This is done in order to release space on the drive.
-
-Do you understand the risk?
 """
-
-CONFIRM_SINGLE_MSG = """
-Do you want the following directory to be saved:"""
-
-CONFIRM_ALL_MSG = """
-Confirm that you want all of the following directories to be mirrored!!!
-(one final confirmation for the entire list, after pressing y and enter back up will start)
-"""
-
-START_MSG = """
-=================================
-Back up task started. Please wait... (You can monitor the process by looking at logs in log/)
+TODO
+- edit rsnapshot.conf from this script for log & snaphots dirs (ask if it's different than current)?
+- user flow (use python library for tui or use the developed one):
+    - start script with config file passed as argument
+    - first thing the script does is it checks for all packages, bins
+    - first page prints all info (status of all backups, date etc, paths from config files)
+    - at the bottom there is a selectable menu (tui):
+        - check drive for smartctl
+			- smartctl resutls saved to file in log/
+			- save logs not only on the destination, but on the source as well
+            - print lsblk
+            - ask for drive (selectable?)
+            - ask: test another drive (y/n) ?
+        - start backup
+            - inform user about how rsnapshot works, get confirmation, start backup, print results
+        - print files modified in the last backup (print the actuall command that is used)
+        - quit
 """
 
 CHANGE_LOG = """
-2.1
+3.1
 ===
-- improved logging, saving information about what changes are being made to files
-
-2.2
+- parsing cli parameters
+- using objects
+- separation of environments to conf files
+- check for presence of perl modules
+3.0
 ===
-- cli arguments parsing
-- change log
-- name was changed from backup_script_for_my_drives_(version).py to backup_my_drives.py
-
+- moved to python 3
+- using rsnapshot rather than rsync to save disk space and have full history
+- using rsnapshot logging
+- sticking with one approach (fully functional rather than func + oop)
+- pep8 compliant
+- better error handling
+- better UI
+- static vars at the top
+- rsnapshot config file the main source of config (e.g. levels)
 2.3
 ===
 - print smartctl errors
 - save to log file the list of all dirs selected
 - save to log file exact rsync commands used
-
+2.2
+===
+- cli arguments parsing
+- change log
+- name was changed from backup_script_for_my_drives_(version).py to \
+backup_my_drives.py
+2.1
+===
+- improved logging
+- saving information about what changes are being made to files
 """
 
 VERSION = """
-2.3
+3.1
 """
 
 
+# ==========================================================================
+#                   LIBRARY
+# ==========================================================================
 
 
-def confirm(msg):
-    """Method used to get confirmation from the user.
-    First print message to the screen. Than ask for confirmation.
-    If y is pressed return 'go'.
-    """
-
-    # print message
-    print ''
-    print msg
-
-    # read input from user
+def get_input(msg):
     try:
-        choice = raw_input('Type y to continue: ')
-    except (KeyboardInterrupt, EOFError): # Suppress keyboard interrupt
-        print '\n\n  Bye.\n'
+        user_input = input(msg)
+    except (KeyboardInterrupt, EOFError):
+        print('Bye.')
         sys.exit(0)
+    return user_input
 
-    # return value
-    if choice == 'y':
-        return 'go'
+
+def get_rsnap_level_info(level, levels_config, snapshots_dir):
+    # value in config file
+    level_info = level + '\tconfig: ' + levels_config[level]
+
+    # count existing snapshots
+    existing_snapshots = 0
+    list_of_snapshots = os.listdir(snapshots_dir)
+    for snap in list_of_snapshots:
+        if level in snap:
+            existing_snapshots += 1
+
+    level_info = level_info + '\texisting: ' + str(existing_snapshots)
+
+    # get last mod date
+    all_snaps = [snapshots_dir + '/' + s for s in os.listdir(snapshots_dir)]
+    all_level_snaps = [snap for snap in all_snaps if (os.path.isdir(snap) and level in snap)]
+    if all_level_snaps:
+        latest_subdir = max(all_level_snaps, key=os.path.getmtime)
+        last_mod_time = time.localtime(os.path.getmtime(latest_subdir))
+        last_mod_time_hum = time.strftime("%Y-%m-%d %H:%M:%S, %z", last_mod_time)
+    else:
+        last_mod_time_hum = 'none'
+
+    level_info = level_info + '\tlast_snap: ' + last_mod_time_hum
+
+    # return full string
+    return level_info
+
+
+def confirm_continue():
+    choice = get_input('continue? (y/n) : ')
+    if choice != 'y':
+        print('Bye.')
+        sys.exit(0)
     else:
         pass
 
 
-class BackupFunctions(object): #pylint: disable=R0903
-    """Main class"""
+def mkdir(path):
 
-    source = '/media/truecrypt1/'
-    destination = '/media/truecrypt2/'
-
-
-    # prepare for logging
-    if not os.path.exists("./log"):
-        os.makedirs("./log")
-
-    i = datetime.now()
-    log_file_name = i.strftime('%Y_%m_%d_%H%M%S') + '.log'
-    log_location = '/media/truecrypt2/log/'
-    log_location_name = log_location + log_file_name
-
-
-
-    def __init__(self):
-
-
-
-        # list of directories to copy
-        self.list_of_dirs = [
-
-            # be careful, directories in this list will be mirrored
-            # exactly!!!!!!!!!!!!!!!!!!!!!!!!
-            # i.e. if directory on the destination contains more content
-            #  than on the source it will be deleted!!!!!!!!!!
-
-            # 1_home
-            '1_home/',
-
-            # 2_data
-            # '2_data/archive/',
-            # '2_data/english/',
-            # '2_data/library-courses-materials/',
-            # '2_data/PHOTO/'
-
-        ]
-
-        self.list_to_run = []
-
-        # check the drive
-        os.system('clear')
-        drive = raw_input('Which drive to check for smartcl?: ')
-        os.system('echo "Checking drive ' + drive + ' for smartctl..."')
-        os.system("smartctl " + drive + " -d sat -l error")
-        metrics = subprocess.check_output("smartctl " + drive + " -d sat -A | grep \"0x00\"", shell=True)
-        # RED='\033[0;31m';NC='\033[0m';IFS=$'\n';for i in `smartctl /dev/sdb -d sat -A | grep "0x00"`; do NR=$(echo $i | awk '{print $1}'); VAL=$(echo $i | awk '{print $10}'); THR=$(echo $i | awk '{print $6}'); if [ "$VAL" -gt "$THR" ];then if [ "$NR" == 5 ] || [ "$NR" == 187 ] || [ "$NR" == 188 ] || [ "$NR" == 196 ] || [ "$NR" == 197 ] || [ "$NR" == 198 ]; then echo -en "${RED}";echo $i; echo -en "${NC}"; else echo $i; fi; fi ; done
-        important_metrics = ['5', '187', '188', '196', '197', '198']
-
-        for line in metrics.split('\n'):
-            # if the line contains metric value
-            if "0x00" in line:
-                columns = line.split()
-                # if raw_value bigger than threshold
-                if columns[5] < columns[9]:
-                    # print in red important metrics
-                    if columns[0] in important_metrics:
-                        print '\033[1;31m' + line + '\033[1;m'
-                    else:
-                        print line
-
-
-        # cli_command = "RED=\'\\033[0;31m';NC='\\033[0m';IFS=$'\\n';for i in " + metrics + "; do NR=\$(echo \$i | awk '{print \$1}'); VAL=\$(echo \$i | awk '{print \$10}'); THR=\$(echo \$i | awk '{print \$6}'); if [ \"\VAL\" -gt \"\$THR\" ];then if [ \"\$NR\" == 5 ] || [ \"\$NR\" == 187 ] || [ \"\$NR\" == 188 ] || [ \"\$NR\" == 196 ] || [ \"\$NR\" == 197 ] || [ \"\$NR\" == 198 ]; then echo -en \"\${RED}\";echo \$i; echo -en \"\${NC}\"; else echo \$i; fi; fi ; done'"
-        
-        # os.system(cli_command)
-        if confirm('Do you want to continue?') == 'go':
-            pass
+    try:
+        # check if dir exists
+        if not os.path.exists(path):
+            # try to create the directory
+            res = subprocess.check_call(['mkdir', path])
+            # failed to create dir if return code is different than zero
+            if res:
+                print('\033[0;31mFailed to create ' + path + '\033[1;m')
+            else:
+                print('\033[0;32m' + path + ' created.\033[1;m')
         else:
-            print '\n\n  Bye.\n'
+            print('\033[0;36m' + path + ' already exists! skipping...\033[1;m')
+    except subprocess.CalledProcessError:
+        print('subprocess error')
+        pass
+    except OSError as err:
+        print(err)
+        sys.exit(1)
+
+
+def clr_scr():
+    subprocess.check_call(
+        '/usr/bin/clear',
+        shell=True
+    )
+
+
+def check_if_bin_installed(command):
+
+    if not shutil.which(command):
+        print(command + ' not installed. Exiting.')
+        sys.exit(0)
+    else:
+        pass
+
+# ==========================================================================
+#                   OBJECT
+# ==========================================================================
+
+
+class BackupObject(object):
+
+    def __init__(self, path):
+        self.SMARTCTL_METRICS = ['5', '187', '188', '196', '197', '198']
+        self.SCRIPT_PARENT_DIR = os.path.dirname(os.path.abspath(__file__))
+        self.CONFIG_FILE = path
+
+        self.SOURCE_LINES = []
+        self.DESTINATION_LINE = ''
+        self.SNAPSHOTS_DIR = ''
+        self.LOG_FILE = ''
+        self.LOG_DIR = ''
+        self.LEVELS = []
+        self.LEVELS_CONFIG = {}
+
+        with open(self.CONFIG_FILE) as f:
+            for line in f:
+                if line.startswith('backup'):
+                    self.SOURCE_LINES.append(line)
+
+                if line.startswith('snapshot_root'):
+                    self.DESTINATION_LINE = line
+                    columns = line.split()
+                    self.SNAPSHOTS_DIR = columns[1]
+
+                if line.startswith('logfile'):
+                    columns = line.split()
+                    self.LOG_FILE = columns[1]
+                    self.LOG_DIR = os.path.dirname(os.path.abspath(self.LOG_FILE))
+
+                if line.startswith('retain'):
+                    columns = line.split()
+                    self.LEVELS.append(columns[1])
+                    self.LEVELS_CONFIG[columns[1]] = columns[2]
+
+        # run functions
+
+        clr_scr()
+        choice = get_input('check drives? (y/n) ')
+        while choice == 'y':
+            self.check_drive()
+            choice = get_input('check another drive? (y/n) ')
+        confirm_continue()
+
+        self.prepare_and_initiate()
+
+    def check_drive(self):
+
+        check_if_bin_installed('smartctl')
+        clr_scr()
+
+        # print disk info to help user
+        subprocess.check_call(
+            'lsblk',
+            shell=True
+        )
+
+        # user input - select drive
+        print('')
+        drive = get_input('Which drive to check for SMART metrics? (/dev/sdx) : ')
+
+        # get metrics from cli
+        try:
+            lines_w_metrics = subprocess.check_output(
+                'smartctl ' + drive + ' -d sat -A | grep "0x00"',
+                shell=True
+            )
+        except subprocess.CalledProcessError as e:
+            print(e)
+            return
+
+        # print SMART metrics
+        for line in lines_w_metrics.decode('utf-8').split('\n'):
+            # double check if line contains a metric
+            if '0x00' in line:
+                columns = line.split()
+                # print only if raw_value bigger than threshold
+                if columns[5] < columns[9]:
+                    if columns[0] in self.SMARTCTL_METRICS:
+                        # print in red important metrics
+                        print('\033[1;31m' + line + '\033[1;m')
+                    else:
+                        # print any other metrics
+                        print(line)
+                else:
+                    print(line)
+
+    def check_perl_mod_installed(self, module_name):
+
+        try:
+            output = subprocess.check_output(
+                'perldoc -l ' + module_name,
+                shell=True
+            ).decode('utf-8')
+        except:
+            print('Did not find perl module ' + module_name)
+            print('yum install perl-CPAN')
+            print('cpan Module::Build')
+            print('cpan Lchown')
+            print('cpan YAML')
+            sys.exit(1)
+
+    def check_sources(self):
+        exit = False
+        for source in self.SOURCE_LINES:
+            path = source.split()[1]
+            if not os.path.isdir(path):
+                print('Following source directory does not exist: ' + path)
+                exit = True
+
+        if exit:
             sys.exit(0)
 
-
-        # make sure that user knows how this coppying works
-        os.system('clear')
-        if confirm(WARNING_MSG):
-
-            # go through the list and ask the user whether to copy an entry
-            os.system('clear')
-            print 'Full list:'
-            for entry in self.list_of_dirs:
-                print entry
-
-            print CONFIRM_SINGLE_MSG
-            for dir_to_confirm in self.list_of_dirs:
-                if confirm(dir_to_confirm) == 'go':
-                    self.list_to_run.append(dir_to_confirm)
-
-
-            if self.list_to_run:
-                # one more confirmation. Just in case.
-                os.system('clear')
-                print CONFIRM_ALL_MSG
-                for cmd in self.list_to_run:
-                    print cmd
-                if confirm(''):
-                    self.run()
-                else:
-                    print '\n\n  Backup task has been canceled. Bye.\n'
-            else:
-                print '\n\n  Backup task has been canceled. Bye.\n'
-
+    def create_directories(self):
+        log_dir_parent = os.path.dirname(self.LOG_DIR)
+        snapshot_dir_parent = os.path.dirname(self.SNAPSHOTS_DIR)
+        if self.SCRIPT_PARENT_DIR != log_dir_parent or self.SCRIPT_PARENT_DIR != snapshot_dir_parent:
+            print('TODO!location of this script is different than configured in the conf file')
+            print(self.LOG_DIR)
+            print(self.SNAPSHOTS_DIR)
+            sys.exit(0)
         else:
-            print '\n\n  Backup task has been terminated. Nothing was done. Bye.\n'
+            mkdir(self.LOG_DIR)
+            mkdir(self.SNAPSHOTS_DIR)
 
+    def prepare_and_initiate(self):
+        clr_scr()
+        check_if_bin_installed('rsnapshot')
+        self.check_perl_mod_installed('Lchown')
+        self.check_perl_mod_installed('YAML')
+        self.check_sources()
 
-    def run(self):
-        """Here is the core functionality."""
+        # print source and destination, prepare dirs
+        self.create_directories()
 
-        if not self.list_to_run:
-            print '\n\n  Nothing to do. List empty. Bye.\n'
+        print('\033[0;36mSources :\033[1;m')
+        for source in self.SOURCE_LINES:
+            print(source.rstrip())
+        print('')
 
-        else:
-            print START_MSG
+        print('\033[0;36mDestination :\033[1;m')
+        print(self.DESTINATION_LINE.rstrip())
+        print('')
 
+        print('\033[0;36mScript path :\033[1;m')
+        print(self.SCRIPT_PARENT_DIR.rstrip())
+        print('')
 
-            for confirmed_entry in self.list_to_run:
-                os.system("echo '" + confirmed_entry + "' >> " + self.log_location_name)
+        confirm_continue()
 
+        # everything is ready at this point, we need to get levels from user
+        # inform how levels work in rsnapshot
+        clr_scr()
+        info = 'Rotation on every level happens regardless if highest snapshot ' +\
+            'from previous level is available. ' +\
+            'New snapshot on every level is created only if highest snapshot ' +\
+            'from previous level is available. ' +\
+            'Only first level actually backs up any files from the file system,' +\
+            'other only rotate. ' +\
+            'This means that if you run 2nd and not all 1st are available, ' +\
+            'you will permanently remove highest 2nd snapshot, ' +\
+            'but not create any new 2nd snapshots.\n'
 
-            for confirmed_entry in self.list_to_run:
-                try:
+        print(info)
 
-                    os.system("echo '" + confirmed_entry + "' >> " + self.log_location_name)
-                    os.system("echo ' ' >> " + self.log_location_name)
+        for level in self.LEVELS:
+            print(get_rsnap_level_info(level, self.LEVELS_CONFIG, self.SNAPSHOTS_DIR))
+        print('')
 
-                    # Here is the core command
-                    command = 'rsync -vvcazhi --delete-after --stats --progress ' + \
-                    self.source + confirmed_entry + ' ' + \
-                    self.destination + confirmed_entry + \
-                    ' >> ' + self.log_location + self.log_file_name + ' 2>&1'
+        # now that the user has been informed, ask for backup level
+        levels_to_run = []
+        for level in self.LEVELS:
+            if get_input('run \033[0;32m' + level + '\033[1;m backup? (y/n) ') == 'y':
+                levels_to_run.append(level)
 
-                    os.system("echo '" + command + "' >> " + self.log_location_name)
+        if not levels_to_run:
+            print('Bye.')
+            sys.exit(0)
 
-                    result = os.system(command)
-                    if result != 0:
-                        print confirmed_entry + \
-                        " failed. See log files for more information."
-                        print ''
+        # print final confirmation
+        print('')
+        msg = 'THIS IS FINAL CONFIRMATION. THE FOLLOWING BACKUPS WILL RUN:\n'
 
-                except (KeyboardInterrupt, EOFError):
-                    # Suppress keyboard interrupt
-                    print '\n\n  Bye.\n'
-                    sys.exit(0)
+        for level in levels_to_run:
+            msg = msg + '\033[1;31m' + level.upper() + '\033[1;m\n'
+
+        print(msg)
+
+        confirm_continue()
+
+        # start backup process
+        self.run_rsnapshot(levels_to_run)
+
+    def run_rsnapshot(self, levels_to_run):
+
+        # check config file
+        try:
+            subprocess.check_call(
+                'rsnapshot -c ' + self.CONFIG_FILE + ' configtest',
+                shell=True
+            )
+        except subprocess.CalledProcessError as e:
+            print(e)
+            return
+
+        # run backups
+        for level in levels_to_run:
+            print('Starting ' + level + ' backup...')
+            try:
+                subprocess.check_call(
+                    'rsnapshot -c ' + self.CONFIG_FILE + ' ' + level,
+                    shell=True
+                )
+            except subprocess.CalledProcessError as e:
+                print(e)
+                return
+
+        # check logs for errors
+        subprocess.check_call(
+            'tail -n 20 ./log/rsnapshot',
+            shell=True
+        )
+
 
 def main():
-    """ Main method, used only to instantiate an object. All logic is in
-    the constructor.
-    """
-    parser = argparse.ArgumentParser(description='Tool used for making backups.')
-    parser.add_argument('-V', '--version', action='version', version=VERSION)
+    parser = argparse.ArgumentParser(
+        description='Script used for creating snapshots of filesystem',
+        epilog='Example of use:\n '
+        'backup_my_drives.py -c config_file.conf'
+    )
+
+    group = parser.add_mutually_exclusive_group()
+
+    group.add_argument(
+        '-c',
+        '--config_file',
+        help='provide path to the config file'
+    )
+
+    parser.add_argument(
+        '-V',
+        '--version',
+        action='version',
+        version=VERSION,
+        help='print version of the script'
+    )
+
     args = parser.parse_args()
 
-    instance = BackupFunctions() #pylint: disable=W0612
+    if len(sys.argv) == 1:
+        parser.print_help()
+        sys.exit(1)
+    else:
+        if args.config_file:
+            BackupObject(args.config_file)
+
 
 if __name__ == '__main__':
     main()
-
