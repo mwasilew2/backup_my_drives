@@ -27,6 +27,8 @@ options loop max_loop=8
 
 
 ```
+- permissions on a newly created volume: top directory might be owned by root, just chmod to your user
+
 
 virtualbox
 ==========
