@@ -45,3 +45,4 @@ to allow non root mount of truecrypt containers:
 - add to sudoers with visudo:
 # Users in the truecrypt group are allowed to run TrueCrypt as root.
 %truecrypt ALL=(root) NOPASSWD:/usr/bin/truecrypt
+
