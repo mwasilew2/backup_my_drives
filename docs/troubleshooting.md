@@ -46,3 +46,4 @@ to allow non root mount of truecrypt containers:
 # Users in the truecrypt group are allowed to run TrueCrypt as root.
 %truecrypt ALL=(root) NOPASSWD:/usr/bin/truecrypt
 
+
