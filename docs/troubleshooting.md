@@ -47,3 +47,4 @@ to allow non root mount of truecrypt containers:
 %truecrypt ALL=(root) NOPASSWD:/usr/bin/truecrypt
 
 
+
